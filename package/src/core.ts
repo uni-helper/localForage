@@ -1,4 +1,5 @@
 import * as sqlite from './sqlite-runtime';
+import * as uniStorage from './uniStorage-runtime';
 
 //本项目在于用sqlite重新实现localForage的API
 //sqlite-runtime.ts是plus.sqlite的封装，用于在plus环境下使用sqlite
@@ -61,13 +62,16 @@ export async function getItem(key: string, successCallback: (err, value) => void
       result.data = result.data[0].value;
     }
   } else if (driver() === UNISTORAGE) {
-    //return uniStorage.getItem(key);
+    result.data = await uniStorage.getItem(key, coreConfig.name, coreConfig.storeName);
+    if (result.data !== null) {
+      result.status = true;
+    }
   }
   successCallback(result.status, result.data);
   if (result.status === true) {
     return result.data;
   } else {
-    throw new Error();
+    throw new Error(undefined);
   }
 }
 
@@ -78,13 +82,13 @@ export async function setItem(key: string, value: any, successCallback: (e) => v
     //使用sqlite.execute()方法往数据库中存储某个key的值
     result = await sqlite.execute(coreConfig.name, `insert or replace into ${coreConfig.storeName} (key, value) values ('${key}', '${value}')`);
   } else if (driver() === UNISTORAGE) {
-    //return uniStorage.setItem(key, value);
+    result = await uniStorage.setItem(key, value, coreConfig.name, coreConfig.storeName);
   }
-  successCallback(result);
+  successCallback(value);
   if (result === true) {
     return value;
   } else {
-    throw new Error();
+    throw new Error(undefined);
   }
 }
 
