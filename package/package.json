@@ -1,0 +1,13 @@
+{
+  "name": "@uni-helper/localForage",
+  "version": "1.0.0",
+  "description": "localForage For UNI-APP",
+  "main": "index.js",
+  "repository": "https://github.com/uni-helper/localForage",
+  "author": "江程训 <dfjsiou@qq.com>",
+  "license": "Apache-2.0 license",
+  "private": false,
+  "dependencies": {
+    "localforage": "^1.10.0"
+  }
+}
