@@ -2,6 +2,11 @@ declare const plus: any;
 
 //使用plus的sqlite重新实现一遍localForage
 
+/**
+ * @name: 一层封装
+ * 
+ **/
+
 // #ifdef APP-PLUS
 
 //打开数据库
@@ -95,10 +100,19 @@ async function selectSql(dbName: string, sql: string): Promise<boolean> {
 
 // #endif
 
+/**
+ * @name: 二层封装
+ * 
+ **/
+
 //往某数据库中执行sql语句的综合方法，包括打开数据库、执行sql语句、关闭数据库（其中关闭数据库要判断是否还有其他操作在执行）
-let counter = 0;
-export async function execute(dbName: string, sql: string) {
-  counter++;
+let counter: counter;
+interface counter {
+  //每一个属性为string类型的属性都是一个数据库的名称，属性的值为一个数字，表示该数据库有多少个操作在执行，默认为0
+  [key: string]: number;
+}
+async function execute(dbName: string, sql: string) {
+  counter[dbName]++;
   let result = false;
   if (!isOpenDatabase(dbName)) {
     result = await openDatabase(dbName);
@@ -112,39 +126,33 @@ export async function execute(dbName: string, sql: string) {
   } else {
     await transaction(dbName, 'rollback');
   }
-  counter--;
-  if (counter === 0) {
+  counter[dbName]--;
+  if (counter[dbName] === 0) {
     await closeDatabase(dbName);
   }
-  if(result){
+  if (result) {
     return true;
-  }else{
+  } else {
     throw new Error();
   }
 }
 //往某数据库中执行查询的sql语句的综合方法，包括打开数据库、执行sql语句、关闭数据库（其中关闭数据库要判断是否还有其他操作在执行）
-export async function select(dbName: string, sql: string) {
-  counter++;
+async function select(dbName: string, sql: string) {
+  counter[dbName]++;
   let result: any = null;
   if (!isOpenDatabase(dbName)) {
     result = await openDatabase(dbName);
   }
   //开始事务
-  await transaction(dbName, 'begin');
   result = await selectSql(dbName, sql);
   //根据执行结果决定是否提交事务
-  if (result !== null) {
-    await transaction(dbName, 'commit');
-  } else {
-    await transaction(dbName, 'rollback');
-  }
-  counter--;
-  if (counter === 0) {
+  counter[dbName]--;
+  if (counter[dbName] === 0) {
     await closeDatabase(dbName);
   }
-  if(result !== null){
+  if (result !== null) {
     return result;
-  }else{
+  } else {
     throw new Error();
   }
 }
@@ -169,4 +177,115 @@ export const isSupportSqlite = () => {
   }
   // #endif
   return result;
+}
+
+//检查数据库中的表是否存在，如果不存在则创建，如果存在则不做任何操作
+//创建成功或者表已存在返回true，创建失败返回false
+export async function checkStore(dbName: string, storeName: string) {
+  const sql = `SELECT name FROM sqlite_master WHERE type='table' AND name='${storeName}';`;
+  const result = await select(dbName, sql);
+  if (result.length > 0) {
+    return true; // 表已存在
+  } else {
+    const createSql = `CREATE TABLE ${storeName} (id INT PRIMARY KEY, name TEXT);`;
+    const createAction = await execute(dbName, createSql);
+    return createAction;
+  }
+}
+
+/**
+ * @name: 最终封装
+ * 
+ **/
+
+export async function setItem(key: string, value: any, dbName: string, storeName: string) {
+  await checkStore(dbName, storeName);
+  const sql = `INSERT OR REPLACE INTO ${storeName} (id, name) VALUES ('${key}', '${value}');`;
+  const result = await execute(dbName, sql);
+  if (result) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+export async function getItem(key: string, dbName: string, storeName: string) {
+  await checkStore(dbName, storeName);
+  const sql = `SELECT name FROM ${storeName} WHERE id='${key}';`;
+  const result = await select(dbName, sql);
+  if (result.length > 0) {
+    return result[0].name;
+  } else {
+    return null;
+  }
+}
+
+export async function removeItem(key: string, dbName: string, storeName: string) {
+  await checkStore(dbName, storeName);
+  const sql = `DELETE FROM ${storeName} WHERE id='${key}';`;
+  const result = await execute(dbName, sql);
+  if (result) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+export async function clear(dbName: string, storeName: string) {
+  await checkStore(dbName, storeName);
+  const sql = `DELETE FROM ${storeName};`;
+  const result = await execute(dbName, sql);
+  if (result) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+export async function key(index: number, dbName: string, storeName: string) {
+  await checkStore(dbName, storeName);
+  const sql = `SELECT id FROM ${storeName} LIMIT ${index}, 1;`;
+  const result = await select(dbName, sql);
+  if (result.length > 0) {
+    return result[0].id;
+  } else {
+    return null;
+  }
+}
+
+export async function keys(dbName: string, storeName: string) {
+  await checkStore(dbName, storeName);
+  const sql = `SELECT id FROM ${storeName};`;
+  const result = await select(dbName, sql);
+  if (result.length > 0) {
+    return result.map((item: any) => {
+      return item.id;
+    });
+  } else {
+    return null;
+  }
+}
+
+export async function length(dbName: string, storeName: string) {
+  //根据keys函数的数组长度来判断
+  const result = await keys(dbName, storeName);
+  if (result !== null) {
+    return result.length;
+  } else {
+    return 0;
+  }
+}
+
+export async function iterate(callback: Function,dbName: string, storeName: string) {
+  await checkStore(dbName, storeName);
+  const sql = `SELECT id, name FROM ${storeName};`;
+  const result = await select(dbName, sql);
+  if (result.length > 0) {
+    result.forEach((item: any) => {
+      callback(item.name, item.id);
+    });
+    return result;
+  }else{
+    return []
+  }
 }

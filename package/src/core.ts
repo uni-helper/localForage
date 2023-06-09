@@ -113,6 +113,11 @@ export function driver(): String {
   }
 }
 
+//ready方法，用于确定数据库是否已经准备好
+export async function ready(): Promise<any> {
+  return true;
+}
+
 //getItem，从数据库中获取某个key的值
 export async function getItem(key: string, successCallback: (err, value) => void): Promise<any> {
   let result = {
@@ -120,11 +125,9 @@ export async function getItem(key: string, successCallback: (err, value) => void
     data: null as any
   }
   if (driver() === SQLITE) {
-    //使用sqlite.select()方法从数据库中获取某个key的值
-    result.data = await sqlite.select(coreConfig.name, `select value from ${coreConfig.storeName} where key = '${key}'`);
-    if (result.data.length > 0) {
+    result.data = await sqlite.getItem(key, coreConfig.name, coreConfig.storeName);
+    if (result.data !== null) {
       result.status = true;
-      result.data = result.data[0].value;
     }
   } else if (driver() === UNISTORAGE) {
     result.data = await uniStorage.getItem(key, coreConfig.name, coreConfig.storeName);
@@ -149,8 +152,7 @@ export async function getItem(key: string, successCallback: (err, value) => void
 export async function setItem(key: string, value: any, successCallback: (e) => void): Promise<any> {
   let result = false;
   if (driver() === SQLITE) {
-    //使用sqlite.execute()方法往数据库中存储某个key的值
-    result = await sqlite.execute(coreConfig.name, `insert or replace into ${coreConfig.storeName} (key, value) values ('${key}', '${value}')`);
+    result = await sqlite.setItem(key, value, coreConfig.name, coreConfig.storeName);
   } else if (driver() === UNISTORAGE) {
     result = await uniStorage.setItem(key, value, coreConfig.name, coreConfig.storeName);
   } else if (driver() === CUSTOMDRIVER) {
@@ -168,8 +170,7 @@ export async function setItem(key: string, value: any, successCallback: (e) => v
 export async function removeItem(key: string, successCallback: () => void): Promise<any> {
   let result = false;
   if (driver() === SQLITE) {
-    //使用sqlite.execute()方法从数据库中删除某个key的值
-    result = await sqlite.execute(coreConfig.name, `delete from ${coreConfig.storeName} where key = '${key}'`);
+    result = await sqlite.removeItem(key, coreConfig.name, coreConfig.storeName);
   } else if (driver() === UNISTORAGE) {
     result = await uniStorage.removeItem(key, coreConfig.name, coreConfig.storeName);
   } else if (driver() === CUSTOMDRIVER) {
@@ -187,13 +188,7 @@ export async function removeItem(key: string, successCallback: () => void): Prom
 export async function clear(successCallback: () => void): Promise<any> {
   let result = false;
   if (driver() === SQLITE) {
-    //获取所有表的名称
-    const tables = await sqlite.select(coreConfig.name, `SELECT name FROM sqlite_master WHERE type='table'`);
-    //删除所有表
-    for (const table of tables) {
-      await sqlite.execute(coreConfig.name, `DELETE FROM ${table.name}`);
-    }
-    result = true;
+    result = await sqlite.clear(coreConfig.name, coreConfig.storeName);
   } else if (driver() === UNISTORAGE) {
     result = await uniStorage.clear(coreConfig.name, coreConfig.storeName);
   } else if (driver() === CUSTOMDRIVER) {
@@ -214,11 +209,9 @@ export async function length(successCallback: (numberOfKeys) => void): Promise<a
     data: 0
   }
   if (driver() === SQLITE) {
-    //使用sqlite.select()方法获取数据库中的key的数量
-    const data = await sqlite.select(coreConfig.name, `select count(*) as count from ${coreConfig.storeName}`);
-    if (data.length > 0) {
+    result.data = await sqlite.length(coreConfig.name, coreConfig.storeName);
+    if (result.data !== null) {
       result.status = true;
-      result.data = data[0].count;
     }
   } else if (driver() === UNISTORAGE) {
     result.data = await uniStorage.length(coreConfig.name, coreConfig.storeName);
@@ -246,11 +239,9 @@ export async function key(n: number, successCallback: (key) => void): Promise<an
     data: '' as string | null
   }
   if (driver() === SQLITE) {
-    //使用sqlite.select()方法获取数据库中的key的数量
-    const data = await sqlite.select(coreConfig.name, `select key from ${coreConfig.storeName} limit ${n}, 1`);
-    if (data.length > 0) {
+    result.data = await sqlite.key(n, coreConfig.name, coreConfig.storeName);
+    if (result.data !== null) {
       result.status = true;
-      result.data = data[0].key;
     }
   } else if (driver() === UNISTORAGE) {
     result.data = await uniStorage.key(n, coreConfig.name, coreConfig.storeName);
@@ -278,14 +269,9 @@ export async function keys(successCallback: (keys: string[]) => void): Promise<s
     status: false
   };
   if (driver() === SQLITE) {
-    //使用sqlite.select()方法获取数据库中的所有key
-    const data: any = await sqlite.select(coreConfig.name, `select key from ${coreConfig.storeName}`);
-    if (data !== null) {
+    result.data = await sqlite.keys(coreConfig.name, coreConfig.storeName);
+    if (result.data !== null) {
       result.status = true;
-      //将所有key放入数组中
-      for (const item of data) {
-        result.data.push(item.key);
-      }
     }
   } else if (driver() === UNISTORAGE) {
     result.data = await uniStorage.keys(coreConfig.name, coreConfig.storeName);
@@ -313,18 +299,12 @@ export async function iterate(iteratorCallback: (value: any, key: string, iterat
     status: false
   };
   if (driver() === SQLITE) {
-    //使用sqlite.select()方法获取数据库中的所有key
-    const data: any = await sqlite.select(coreConfig.name, `select key, value from ${coreConfig.storeName}`);
-    if (data !== null) {
+    result.data = await sqlite.iterate(iteratorCallback, coreConfig.name, coreConfig.storeName);
+    if (result.data !== null) {
       result.status = true;
-      //将所有key放入数组中
-      for (let i = 0; i < data.length; i++) {
-        const item = data[i];
-        iteratorCallback(item.value, item.key, i);
-      }
     }
   } else if (driver() === UNISTORAGE) {
-    result.status
+    result.status = true;
   } else if (driver() === CUSTOMDRIVER) {
     result.data = await customDriver.iterate(iteratorCallback);
     if (result.data !== null) {
